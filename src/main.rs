@@ -1,4 +1,4 @@
-mod chip_8;
+mod processor;
 mod font;
 
 fn main() {

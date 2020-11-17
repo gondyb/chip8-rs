@@ -14,7 +14,6 @@ const KEYPAD_SIZE: usize = 16;
 
 const SCREEN_WIDTH: usize = 64;
 const SCREEN_HEIGHT: usize = 32;
-const SCREEN_RESOLUTION: usize = SCREEN_WIDTH * SCREEN_HEIGHT;
 
 const CARRY_REGISTER: usize = 0xF;
 
@@ -31,12 +30,12 @@ pub struct Processor {
     delay_timer: u8,
     sound_timer: u8,
     keypad: [bool; KEYPAD_SIZE],
-    video: [[u8; SCREEN_WIDTH]; SCREEN_HEIGHT],
+    pub(crate) video: [[u8; SCREEN_WIDTH]; SCREEN_HEIGHT],
     opcode: u16
 }
 
 impl Processor {
-    fn new() -> Processor {
+    pub fn new() -> Processor {
         let mut memory = [0; MEMORY_SIZE];
 
         for i in 0..FONTSET.len() {
@@ -209,7 +208,10 @@ impl Processor {
 
     // Set Vx = Vx + kk.
     fn op_7xkk(&mut self, x: usize, kk: u8) {
-        self.registers[x] = self.registers[x] + kk;
+        let vx = self.registers[x] as u16;
+        let val = kk as u16;
+        let result = vx + val;
+        self.registers[x] = result as u8;
     }
 
     // Set Vx = Vy.
@@ -237,22 +239,19 @@ impl Processor {
     // If the result is greater than 8 bits (i.e., > 255,) VF is set to 1, otherwise 0.
     // Only the lowest 8 bits of the result are kept, and stored in Vx.
     fn op_8xy4(&mut self, x: usize, y: usize) {
-        let sum = self.registers[x] + self.registers[y];
-
-        self.registers[CARRY_REGISTER] = if sum > 0xFF { 1 } else { 0 };
-
-        self.registers[x] = sum & 0xFF;
+        let vx = self.registers[x] as u16;
+        let vy = self.registers[y] as u16;
+        let result = vx + vy;
+        self.registers[x] = result as u8;
+        self.registers[CARRY_REGISTER] = if result > 0xFF { 1 } else { 0 };
     }
 
     // Set Vx = Vx - Vy, set VF = NOT borrow.
     // If Vx > Vy, then VF is set to 1, otherwise 0.
     // Then Vy is subtracted from Vx, and the results stored in Vx.
     fn op_8xy5(&mut self, x: usize, y: usize) {
-        let sub = self.registers[x] - self.registers[y];
-
-        self.registers[CARRY_REGISTER] = if sub > 0 { 1 } else { 0 };
-
-        self.registers[x] = sub;
+        self.registers[CARRY_REGISTER] = if self.registers[x] > self.registers[y] { 1 } else { 0 };
+        self.registers[x] = self.registers[x].wrapping_sub(self.registers[y]);
     }
 
     // Set Vx = Vx SHR 1.
@@ -268,20 +267,16 @@ impl Processor {
     // If Vy > Vx, then VF is set to 1, otherwise 0.
     // Then Vx is subtracted from Vy, and the results stored in Vx.
     fn op_8xy7(&mut self, x: usize, y: usize) {
-        let sub = self.registers[y] - self.registers[x];
-
-        self.registers[CARRY_REGISTER] = if sub > 0 { 1 } else { 0 };
-
-        self.registers[x] = sub;
+        self.registers[CARRY_REGISTER] = if self.registers[y] > self.registers[x] { 1 } else { 0 };
+        self.registers[x] = self.registers[y].wrapping_sub(self.registers[x]);
     }
 
     // Set Vx = Vx SHL 1.
     // If the most-significant bit of Vx is 1, then VF is set to 1, otherwise to 0.
     // Then Vx is multiplied by 2.
     fn op_8xye(&mut self, x: usize) {
-        self.registers[CARRY_REGISTER] = self.registers[x] & 0x80 >> 7;
-
-        self.registers[x] = self.registers[x] << 1;
+        self.registers[CARRY_REGISTER] = (self.registers[x] & 0b10000000) >> 7;
+        self.registers[x] <<= 1;
     }
 
     // Skip next instruction if Vx != Vy.
@@ -404,15 +399,15 @@ impl Processor {
 
     // Store registers V0 through Vx in memory starting at location I.
     fn op_fx55(&mut self, x: usize) {
-        for i in 0..x {
-            self.memory[(self.index + 1) as usize] = self.registers[i as usize];
+        for i in 0..x + 1 {
+            self.memory[self.index as usize + i] = self.registers[i];
         }
     }
 
     // Read registers V0 through Vx from memory starting at location I.
     fn op_fx65(&mut self, x: usize) {
-        for i in 0..x {
-            self.registers[i as usize] = self.memory[self.index as usize + i];
+        for i in 0..x + 1 {
+            self.registers[i] = self.memory[self.index as usize + i];
         }
     }
 

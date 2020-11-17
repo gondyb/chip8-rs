@@ -1,5 +1,5 @@
 [package]
-name = "chip-8-emulator"
+name = "chip8-rs"
 version = "0.1.0"
 authors = ["Benjamin Gondange <benjamin.gondange@reseau.eseo.fr>"]
 edition = "2018"
